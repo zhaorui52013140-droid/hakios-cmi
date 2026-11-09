@@ -8,7 +8,8 @@
 #
 # usage: tools/mk-wlfw.sh          then build the kernel (./xnu-build.sh); again after a clean build
 set -e
-ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+HERE=$(cd "$(dirname "$0")" && pwd -P)
+ROOT=$(cd "$HERE/.." && pwd -P)
 source "$ROOT/xnu-env.sh"
 ATH=$ROOT/xnu-deps/build/ath11k/src/ath11k
 [ -f "$ATH/qmi.c" ] || "$ROOT/tools/mk-ath11k.sh"
