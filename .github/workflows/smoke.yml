@@ -1,0 +1,16 @@
+# 诊断用：同一份工作流里跑一个 Linux job 和一个 macOS job。
+# 两个都立刻 cancelled → 账号级的 Actions 限制
+# 只有 mac 那个 cancelled → macOS runner 的额度/付款方式问题
+name: smoke
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "linux ok"; uname -a
+  mac:
+    runs-on: macos-14
+    steps:
+      - run: echo "mac ok"; sw_vers; xcodebuild -version; "$(xcrun -f ld)" -v
