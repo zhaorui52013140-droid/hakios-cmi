@@ -157,6 +157,30 @@ jobs:
           echo "=== 导出符号（应为 _lx_prepare/_lx_start/_lx_stop/_lx_transmit）==="
           llvm-nm --format=just-symbols xnu-deps/build/ath11k/out/ath11k.o | head -10
 
+      # xnu-build.sh 只在两件事同时成立时把 ath11k.o 交给链接：
+      #   1) $XNUDEPS/build/ath11k/out/ath11k.o 存在
+      #   2) config/MASTER.hakios 的 HAKIOS_DRIVERS 里有 hakios_wifi
+      # 2026-11-09 第一次成功的构建里产物只有 47 条 ath11k 字符串（带驱动应是 776），
+      # 说明其中一条没成立。这一步把判断摊开，并且不成立就直接失败，不必编完才发现。
+      - name: 确认 ath11k 会被链进去
+        if: ${{ inputs.ath11k != 'false' }}
+        run: |
+          X="out/${{ inputs.device }}/xnu"
+          echo "=== 1) 驱动对象 ==="
+          ls -l xnu-deps/build/ath11k/out/ath11k.o || { echo "::error::ath11k.o 不存在"; exit 1; }
+          echo "=== 2) MASTER.hakios 的驱动行 ==="
+          grep -n "HAKIOS_DRIVERS" "$X/config/MASTER.hakios" | head -2
+          if grep -q '^#  HAKIOS_DRIVERS = \[.* hakios_wifi ' "$X/config/MASTER.hakios"; then
+            echo "grep 匹配 —— xnu-build.sh 会链接 ath11k.o"
+          else
+            echo "::error::grep 不匹配 —— xnu-build.sh 会把 LX 置空，驱动不会被链接"
+            exit 1
+          fi
+          echo "=== 3) 内核要包含的 wifi 源文件在不在 ==="
+          for f in hakios.wifi.c hakios.wlfw.c hakios.lx.c hakios.sta.c hakios.apple80211.c; do
+            printf '  %-22s %s\n' "$f" "$([ -f "$X/bsd/dev/$f" ] && echo 有 || echo 缺)"
+          done
+
       - name: 编译内核
         run: |
           J="${{ inputs.jobs }}"
