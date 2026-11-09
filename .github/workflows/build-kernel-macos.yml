@@ -78,6 +78,16 @@ jobs:
           echo "$(brew --prefix m4)/bin" >> "$GITHUB_PATH"
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
 
+          # macOS 没有 nproc，而 xnu/hakios.patch 用它填 sysctl hw.physicalcpu / hw.logicalcpu：
+          #   export SYSCTL_HW_PHYSICALCPU := $(shell nproc)
+          # 缺了它 make 会拿到空值，接着 expr 报错、wordlist 拿到非数字，
+          # exporthdrs 就死在 makedefs/MakeInc.cmd:480。补一个垫片，不动上游补丁。
+          mkdir -p "$HOME/bin"
+          printf '#!/bin/sh\n# macOS 没有 nproc；用 sysctl 顶上\nsysctl -n hw.ncpu\n' > "$HOME/bin/nproc"
+          chmod +x "$HOME/bin/nproc"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          echo "nproc 垫片: $("$HOME/bin/nproc") 核"
+
       - name: 缓存 xnu-deps
         uses: actions/cache@v4
         with:
