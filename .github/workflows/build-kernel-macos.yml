@@ -147,7 +147,11 @@ jobs:
         run: |
           J="${{ inputs.jobs }}"
           [ -n "$J" ] || J=$(sysctl -n hw.ncpu)
-          ./xnu-build.sh -j"$J" 2>&1 | tee build.log
+          # 用设备包自己的入口，而不是"prepare.py + xnu-build.sh"：它多做两件仓库里没有生成物的事
+          #   bsd/dev/umi_bt_firmware.inc           厂商蓝牙固件（仓库不含；缺失时写零长度占位）
+          #   bsd/DEVELOPMENT/hakios.wlfw_ath11k.h  从 ath11k 源码抽出的 QMI 描述
+          # 少了第一个，umi_bluetooth.c 直接 fatal error（2026-11-09 实测，见 docs/10 §10）。
+          bash "./devices/${{ inputs.device }}/build-kernel.sh" -j"$J" 2>&1 | tee build.log
           # xnu-build.sh 只更新 BUILD/obj 下的 mach.*，不刷新根目录的 hakios-kernel（Linux 上已踩过：
           # 构建成功但 hakios-kernel 还是三天前的）。这里补上，否则上传的 artifact 是旧内核。
           K="out/${{ inputs.device }}/xnu/BUILD/obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837"
