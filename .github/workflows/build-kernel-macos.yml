@@ -202,13 +202,20 @@ jobs:
           K="out/${{ inputs.device }}/xnu/BUILD/obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837"
           ls -l "$K" hakios-kernel 2>/dev/null || true
           echo "=== 产物里的 LC_BUILD_VERSION ==="
-          otool -l "$K" 2>/dev/null | grep -A6 LC_BUILD_VERSION | head -20
-          echo "=== 驱动是否真的编进去了 ==="
+          echo "tool ld 必须是 Apple 的 9xx/10xx，不是 cctools-port 的 609"
+          otool -l "$K" 2>/dev/null | grep -A8 LC_BUILD_VERSION | head -24
+
+          echo "=== 驱动是否真的链进去了：数符号，不要数字符串 ==="
+          # 2026-11-09 踩过：strings -a | grep -c ath11k 在这份产物上只给 47（Linux 上同类产物是 791），
+          # 但 nm 数出 777 个 ath11k 符号、四个 _lx_* 入口都在——驱动其实链进去了。
+          # BSD strings 的行为与 GNU 不同，所以字符串数在这里不是可靠指标。
           for f in hakios-kernel "$K"; do
             [ -f "$f" ] || continue
-            n=$(strings -a "$f" | grep -c ath11k || true)
-            echo "$f: ath11k 字符串 $n 条（能开机的 Oct24 内核是 9，带驱动的 Oct25 是 776）"
+            n=$(nm -a "$f" 2>/dev/null | grep -c ath11k || true)
+            echo "$f: ath11k 符号 $n 个（Linux 版 748；<100 说明没链进去）"
           done
+          echo "=== 四个入口（hakios.lx.c 从这里调进驱动）==="
+          nm -a "$K" 2>/dev/null | grep -E "_lx_(prepare|start|stop|transmit)$" || echo "::error::产物里没有 _lx_* 入口"
 
       - name: 上传内核
         uses: actions/upload-artifact@v4
