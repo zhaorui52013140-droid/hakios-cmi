@@ -108,8 +108,15 @@ jobs:
       # 再从 github.com/theos/sdks 拉 iPhoneOS16.5.sdk（约 220 MB）
       - name: 拉依赖与 SDK
         run: |
+          # setup.sh 是幂等的（"What is already there is left alone"），所以失败可以直接重试。
+          # 实测 2026-11-09：macOS 13.3 SDK（约 250 MB）偶发下载失败，重跑一次就过。
           if [ ! -e xnu-deps/host/bin/ld64 ]; then
-            xnu-deps/setup.sh
+            for attempt in 1 2 3; do
+              if xnu-deps/setup.sh; then break; fi
+              echo "::warning::setup.sh 第 $attempt 次失败，重试"
+              [ "$attempt" = 3 ] && exit 1
+              sleep 5
+            done
           else
             echo "xnu-deps 已有，跳过"
           fi
@@ -138,7 +145,14 @@ jobs:
       - name: 构建 ath11k 驱动对象
         if: ${{ inputs.ath11k != 'false' }}
         run: |
-          ./tools/mk-ath11k.sh 2>&1 | tee ath11k.log
+          # Linux 7.0.14（150 MB）与 FreeBSD 15.1（253 MB）也走网络，同样重试；
+          # mk-ath11k.sh 保留已下载的归档，重跑只补缺的那一个。
+          for attempt in 1 2 3; do
+            if ./tools/mk-ath11k.sh 2>&1 | tee ath11k.log; then break; fi
+            echo "::warning::mk-ath11k.sh 第 $attempt 次失败，重试"
+            [ "$attempt" = 3 ] && exit 1
+            sleep 5
+          done
           ls -l xnu-deps/build/ath11k/out/ath11k.o
           echo "=== 导出符号（应为 _lx_prepare/_lx_start/_lx_stop/_lx_transmit）==="
           llvm-nm --format=just-symbols xnu-deps/build/ath11k/out/ath11k.o | head -10
