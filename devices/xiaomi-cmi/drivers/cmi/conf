@@ -1,0 +1,16 @@
+driver CMI
+    default n
+    help Xiaomi Mi 10 Pro board drivers, selected only by cmi_defconfig
+    file bsd/dev/hakios.cmi_touch.c
+    file bsd/dev/hakios.cmi_keys.c
+    file bsd/dev/hakios.cmi_rpmh.c
+    file bsd/dev/hakios.cmi_touch_boost.c
+    file bsd/dev/hakios.cmi_wifi.c
+    file bsd/dev/hakios.cmi_bluetooth.c
+    file bsd/dev/hakios.cmi_mhi.c
+    file bsd/dev/hakios.cmi_pcie.c
+    file bsd/dev/hakios.cmi_camera.c
+    file bsd/dev/hakios.cmi_camera_dma.c
+    file bsd/dev/hakios.cmi_board.c
+    file bsd/dev/hakios.cmi_display.c
+    file iokit/Kernel/hakios.cmi_bluetooth.cpp iokitcpp

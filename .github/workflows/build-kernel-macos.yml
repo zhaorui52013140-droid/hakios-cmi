@@ -1,0 +1,155 @@
+# 在没有 Mac 硬件的情况下，用 GitHub Actions 的 macOS runner 编内核。
+#
+# 为什么需要 macOS：能开机的那个 Oct 24 内核，其 LC_BUILD_VERSION 记录的是
+#   tool ld, version 956.6   ← Apple 的 ld64（Xcode 15 世代）
+# 而 Linux 上只能拿到 cctools-port 的 ld64-609。Apple 的 ld64 不开放源码，
+# Linux 上拿不到，所以"用 Apple 链接器链接"这件事只能发生在 macOS 上。
+#
+# 用法：
+#   1. 把这个文件放到仓库的 .github/workflows/build-kernel-macos.yml
+#   2. 仓库里需要有完整的 hakios 树（见 ci/README.md 的"仓库要包含什么"）
+#   3. Actions 里手动触发（workflow_dispatch），或 push 到 main
+#   4. 跑完在 Artifacts 里下载 hakios-kernel
+#
+# 预计耗时：首次约 25–40 分钟（含拉 SDK 与 Apple 源码），之后有缓存约 15 分钟。
+
+name: build-kernel-macos
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '设备包目录名（devices/ 下）'
+        required: true
+        default: 'xiaomi-cmi'
+      jobs:
+        description: '并行编译数（留空 = CPU 核数）'
+        required: false
+        default: ''
+      ath11k:
+        description: '同时编 Wi-Fi 驱动（ath11k）：true / false'
+        required: false
+        default: 'true'
+
+jobs:
+  build:
+    # macos-14 = Apple Silicon + Xcode 15.x，交叉编译 arm64 内核是原生速度
+    runs-on: macos-14
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # xnu-deps/ 和 out/ 是生成物，不进仓库；BUILD/ 也不要
+          fetch-depth: 1
+
+      # 关键一步：把链接器版本打进日志。
+      # 如果这里不是 9xx/10xx（而是 609），说明还在用 cctools-port，等于没换工具链。
+      - name: 记录工具链版本
+        run: |
+          echo "=== Xcode ==="
+          xcodebuild -version
+          echo "=== ld64 ==="
+          xcrun -f ld
+          "$(xcrun -f ld)" -v 2>&1 | head -3
+          echo "=== clang ==="
+          xcrun -f clang
+          clang --version | head -3
+          echo "=== SDK ==="
+          xcrun --sdk iphoneos --show-sdk-version
+
+      # xnu-deps/setup.sh 需要：git curl tar xz make cc clang flex bison m4 perl python3 autoconf automake
+      # macOS runner 自带 git/curl/tar/make/clang/perl/python3，其余用 brew 补
+      # llvm 是为了 tools/mk-ath11k.sh：它要 llvm-nm 与 llvm-size，Xcode 里那两个不在 PATH 上
+      - name: 安装构建依赖
+        run: |
+          brew install xz flex bison m4 autoconf automake llvm
+          # brew 装的 flex/bison 要排到系统老版本前面
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix m4)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: 缓存 xnu-deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            xnu-deps
+            xnu-src
+          # 换了 hakios.patch 或设备补丁就换 key，避免用旧树
+          key: xnu-deps-${{ runner.os }}-${{ hashFiles('xnu/hakios.patch', 'devices/*/xnu-device.patch') }}
+
+      # 第一步：Apple 源码 + 补丁 + 驱动 → out/<device>/xnu
+      # 这一步会 git fetch github.com/apple-oss-distributions/xnu 的 xnu-8796.121.2 tag
+      - name: 生成内核树（apply.sh + 设备补丁）
+        run: |
+          python3 "devices/${{ inputs.device }}/prepare.py" kernel
+          echo "XNU_SRC=$PWD/out/${{ inputs.device }}/xnu" >> "$GITHUB_ENV"
+
+      # setup.sh 在 macOS 上走 theos_mac()：把 Xcode 的 cctools 链进 theos 布局，
+      # 再从 github.com/theos/sdks 拉 iPhoneOS16.5.sdk（约 220 MB）
+      - name: 拉依赖与 SDK
+        run: |
+          if [ ! -e xnu-deps/host/bin/ld64 ]; then
+            xnu-deps/setup.sh
+          else
+            echo "xnu-deps 已有，跳过"
+          fi
+          echo "=== 确认 host/bin/ld64 指向 ==="
+          ls -l xnu-deps/host/bin/ld64
+          readlink -f xnu-deps/host/bin/ld64 2>/dev/null || python3 -c "import os;print(os.path.realpath('xnu-deps/host/bin/ld64'))"
+
+      # ath11k：Wi-Fi 驱动对象。xnu-build.sh 在 out/ath11k.o 存在时才链接它，
+      # 所以必须在编内核之前生成。见 docs/09 §5 与 §8。
+      # 注意：这一步会下载 Linux 7.0.14（150 MB）与 FreeBSD 15.1（253 MB），约 5–8 分钟。
+      - name: 构建 ath11k 驱动对象
+        if: ${{ inputs.ath11k != 'false' }}
+        run: |
+          ./tools/mk-ath11k.sh 2>&1 | tee ath11k.log
+          ls -l xnu-deps/build/ath11k/out/ath11k.o
+          echo "=== 导出符号（应为 _lx_prepare/_lx_start/_lx_stop/_lx_transmit）==="
+          llvm-nm --format=just-symbols xnu-deps/build/ath11k/out/ath11k.o | head -10
+
+      - name: 编译内核
+        run: |
+          J="${{ inputs.jobs }}"
+          [ -n "$J" ] || J=$(sysctl -n hw.ncpu)
+          ./xnu-build.sh -j"$J" 2>&1 | tee build.log
+          # xnu-build.sh 只更新 BUILD/obj 下的 mach.*，不刷新根目录的 hakios-kernel（Linux 上已踩过：
+          # 构建成功但 hakios-kernel 还是三天前的）。这里补上，否则上传的 artifact 是旧内核。
+          K="out/${{ inputs.device }}/xnu/BUILD/obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837"
+          cp -f "$K" hakios-kernel
+          ls -l "$K" hakios-kernel
+
+      # 编完再验一次：产物里的 ld 版本必须是 Apple 的，否则这次构建没有意义
+      - name: 校验产物
+        run: |
+          K="out/${{ inputs.device }}/xnu/BUILD/obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837"
+          ls -l "$K" hakios-kernel 2>/dev/null || true
+          echo "=== 产物里的 LC_BUILD_VERSION ==="
+          otool -l "$K" 2>/dev/null | grep -A6 LC_BUILD_VERSION | head -20
+          echo "=== 驱动是否真的编进去了 ==="
+          for f in hakios-kernel "$K"; do
+            [ -f "$f" ] || continue
+            n=$(strings -a "$f" | grep -c ath11k || true)
+            echo "$f: ath11k 字符串 $n 条（能开机的 Oct24 内核是 9，带驱动的 Oct25 是 776）"
+          done
+
+      - name: 上传内核
+        uses: actions/upload-artifact@v4
+        with:
+          name: hakios-kernel-macos
+          path: |
+            hakios-kernel
+            out/${{ inputs.device }}/xnu/BUILD/obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837
+          if-no-files-found: warn
+
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            ath11k.log
+          if-no-files-found: warn

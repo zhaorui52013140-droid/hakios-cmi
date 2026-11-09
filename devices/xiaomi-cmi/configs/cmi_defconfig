@@ -1,0 +1,4 @@
+# Runtime arguments are supplied by the device run.sh, including umi-line only options.
+#include common_defconfig
+#include sm8250.config
+#include cmi.config

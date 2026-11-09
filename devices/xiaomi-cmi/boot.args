@@ -1,0 +1,1 @@
+cpus=8 bootcpu=0 ufs=2 touchscreen=1 gpu=1 fb_scan=1 fb_threads=6 fb_filter=0 umi_touch=1 umi_keys=1 cpufreq=1 battery=1 adsp=1 adsp_umi=1 sound=4 sound_below=0
