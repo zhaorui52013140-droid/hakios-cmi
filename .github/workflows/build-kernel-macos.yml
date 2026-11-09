@@ -107,6 +107,21 @@ jobs:
           ls -l xnu-deps/host/bin/ld64
           readlink -f xnu-deps/host/bin/ld64 2>/dev/null || python3 -c "import os;print(os.path.realpath('xnu-deps/host/bin/ld64'))"
 
+      # setup.sh 的 stage 2 要导出内核头（make exporthdrs），它把输出重定向进 exporthdrs.log，
+      # 失败时只留一句"see xnu-deps/exporthdrs.log"。这一步把那个文件打出来，
+      # 免得为了看一行错误去下载 artifact 再重跑。
+      - name: 失败时打印 setup 日志
+        if: failure()
+        run: |
+          for f in xnu-deps/exporthdrs.log xnu-deps/mig-build.log xnu-deps/tcsh-build.log; do
+            if [ -f "$f" ]; then
+              echo "================ $f（末 120 行）================"
+              tail -120 "$f"
+            fi
+          done
+          echo "================ 找一下 error 行 ================"
+          grep -n -i -m20 "error:" xnu-deps/exporthdrs.log 2>/dev/null || echo "（没有 error: 行）"
+
       # ath11k：Wi-Fi 驱动对象。xnu-build.sh 在 out/ath11k.o 存在时才链接它，
       # 所以必须在编内核之前生成。见 docs/09 §5 与 §8。
       # 注意：这一步会下载 Linux 7.0.14（150 MB）与 FreeBSD 15.1（253 MB），约 5–8 分钟。
@@ -160,4 +175,6 @@ jobs:
           path: |
             build.log
             ath11k.log
+            xnu-deps/exporthdrs.log
+            xnu-deps/mig-build.log
           if-no-files-found: warn
