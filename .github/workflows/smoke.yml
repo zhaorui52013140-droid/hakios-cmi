@@ -1,6 +1,7 @@
-# 诊断用：同一份工作流里跑一个 Linux job 和一个 macOS job。
-# 两个都立刻 cancelled → 账号级的 Actions 限制
-# 只有 mac 那个 cancelled → macOS runner 的额度/付款方式问题
+# 诊断用：同一份工作流跑四种 runner，一次分清三件事
+#   linux 成功 + windows 成功 + mac 全 cancelled  → 只有 macOS 被挡（付费/资格门槛）
+#   linux 成功 + windows 也 cancelled            → 所有付费 SKU 被挡
+#   macos-latest 成功 + macos-14 cancelled       → macos-14 这个标签已退役
 name: smoke
 on:
   workflow_dispatch:
@@ -10,7 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "linux ok"; uname -a
-  mac:
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: echo "windows ok"; ver
+
+  mac_latest:
+    runs-on: macos-latest
+    steps:
+      - run: echo "macos-latest ok"; sw_vers; uname -m
+
+  mac_14:
     runs-on: macos-14
     steps:
-      - run: echo "mac ok"; sw_vers; xcodebuild -version; "$(xcrun -f ld)" -v
+      - run: echo "macos-14 ok"; sw_vers; uname -m
