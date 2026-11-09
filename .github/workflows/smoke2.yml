@@ -1,0 +1,20 @@
+# 诊断用：哪些 macOS 镜像还有 runner，各自的 Xcode / ld64 是什么
+name: smoke2
+on:
+  workflow_dispatch:
+
+jobs:
+  mac_15:
+    runs-on: macos-15
+    steps:
+      - run: sw_vers; uname -m; xcodebuild -version; "$(xcrun -f ld)" -v 2>&1 | head -3
+
+  mac_26:
+    runs-on: macos-26
+    steps:
+      - run: sw_vers; uname -m; xcodebuild -version; "$(xcrun -f ld)" -v 2>&1 | head -3
+
+  mac_15_intel:
+    runs-on: macos-15-intel
+    steps:
+      - run: sw_vers; uname -m; xcodebuild -version; "$(xcrun -f ld)" -v 2>&1 | head -3
