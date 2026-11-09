@@ -33,8 +33,16 @@ on:
 
 jobs:
   build:
-    # macos-14 = Apple Silicon + Xcode 15.x，交叉编译 arm64 内核是原生速度
-    runs-on: macos-14
+    # 2026-11-09 实测这台 runner 的版本（四选一，见 docs/10 §9）：
+    #   macos-15        macOS 15.8.2 arm64  Xcode 16.4  ld-1167.5   ← 用这个
+    #   macos-15-intel  macOS 15.7.9 x86_64 Xcode 16.4  ld-1167.5
+    #   macos-26        macOS 26.7.2 arm64  Xcode 26.6  ld-1267
+    #   macos-14        ← 已退役：job 被 cancelled，连 runner 都不分配（不是账号问题）
+    #
+    # 能开机的 Oct 24 内核是 ld 956.6（Xcode 15），那台镜像已经没了。macos-15 的 ld-1167.5
+    # 是最接近的可用 Apple 链接器；选它而不是 26，是因为 2026 年的 clang 编 2023 年的 XNU
+    # 风险更大，而这次要验证的是"Apple 的 ld64 而不是 cctools-port 的 609"。
+    runs-on: macos-15
     timeout-minutes: 120
 
     steps:
