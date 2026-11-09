@@ -37,13 +37,15 @@
 #
 # usage: tools/mk-ath11k.sh [fetch]        "fetch" stops when the driver's sources are there
 set -e
-# macOS ships shasum, Linux ships sha256sum; both print "<hash>  <name>"
-if command -v sha256sum >/dev/null 2>&1; then
-	sha256() { sha256sum "$@"; }
-	sha_check() { echo "$1  $2" | sha256sum -c --quiet; }
-else
+# Both print "<hash>  <name>". macOS is decided by name, not by "is sha256sum there": the one
+# macOS carries is not GNU's (it wants file arguments, has no -c, and does not read standard input),
+# so testing for it picks the wrong branch.
+if [ "$(uname -s)" = Darwin ]; then
 	sha256() { shasum -a 256 "$@"; }
 	sha_check() { echo "$1  $2" | shasum -a 256 -c -s; }
+else
+	sha256() { sha256sum "$@"; }
+	sha_check() { echo "$1  $2" | sha256sum -c --quiet; }
 fi
 VERSION=7.0.14
 SHA256=de9999b784d2293f00d39c62d8f92a08ab8a54bc4e80ffd250a0c09cb07a0f98
