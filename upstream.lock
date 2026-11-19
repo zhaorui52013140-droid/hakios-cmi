@@ -1,0 +1,13 @@
+# 这份增量针对的基线。改动前先对齐到这里，否则行号与上下文会对不上。
+repository = https://github.com/xm6661885/hakios-xnu-kernel-umi-fixes
+commit     = a5f9d5eaee7053c444833d3641cc3308c8af48d3
+branch     = main
+date       = 2026-11-05
+
+# 再往上一层的源头，署名与历史都在那两处
+origin     = https://github.com/oosexgang/hakios-xnu-kernel
+origin_note = hakios-xnu-kernel-umi-fixes 是它在 UMI/cmi 方向上的衍生；本仓库是两者的增量
+
+# 本仓库覆盖的内核设备目录（相对基线仓库根）
+kernel_driver_dir = devices/xiaomi-mi-10/overlays/xnu/files/bsd/dev
+conf_files        = bsd/conf/files

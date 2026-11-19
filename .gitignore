@@ -1,0 +1,8 @@
+*.o
+*.a
+*.bin
+*.img
+*.apfs
+*.dtb
+*.log
+__pycache__/
